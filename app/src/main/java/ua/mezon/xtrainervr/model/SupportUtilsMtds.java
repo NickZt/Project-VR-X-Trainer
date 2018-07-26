@@ -22,11 +22,11 @@ public class SupportUtilsMtds {
     public static final int PRIVATE_MODE = 0;
 
 
-    public static final String FILE_EXT_SEND = ".effx";
     public static final String FILE_EXT_PLAY = ".avi";
     public static final String ROOT_DIR = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toString() + "/VRTren/";
     public static final String SD_DIR = Environment.getExternalStorageDirectory().toString() + "/Downloads"+ "/VRTren/";
     public static final int READ_EXTERNAL_STORAGE_PERMISSION_CODE = 1;
+    public static final int READ_BLUETOOTH_PERMISSION_CODE = 2;
     private static final String TAG = "TODEL";
 
 
@@ -34,12 +34,8 @@ public class SupportUtilsMtds {
     public boolean isExternalStorageReadable()
     {
         String state = Environment.getExternalStorageState();
-        if (Environment.MEDIA_MOUNTED.equals(state) ||
-                Environment.MEDIA_MOUNTED_READ_ONLY.equals(state))
-        {
-            return true;
-        }
-        return false;
+        return Environment.MEDIA_MOUNTED.equals(state) ||
+                Environment.MEDIA_MOUNTED_READ_ONLY.equals(state);
     }
     public static String getLocalIpAddress() { //getIpV4Address
         //   TODO: Main detect method

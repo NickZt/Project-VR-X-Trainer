@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.ListView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -36,27 +37,27 @@ import io.reactivex.annotations.NonNull;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
-import ua.mezon.xtrainervr.model.CliProc;
+import ua.mezon.xtrainervr.model.BLEProc;
 import ua.mezon.xtrainervr.model.SupportUtilsMtds;
 
-import static com.asha.vrlib.MDVRLibrary.INTERACTIVE_MODE_MOTION;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.IS_sVolume;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.PREF_NAME;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.PRIVATE_MODE;
 
-/**
- * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
- */
+
 public class FullscreenActivity extends AppCompatActivity {
     /**
      * Whether or not the system UI should be auto-hidden after
      * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
      */
-    private static final String URL0 = "file://";//4.avi
-    private static final String URLEXT = "file:///storage/external_SD/Download/VRTren/";
+    private static final String URL0 = "file://";
+    private static final String URLEXT = "file:///storage/external_SD/Download/VRTren/";//4.avi
+    private static final String TAG = "VRTrainer";
+    private TextView mConnectionState;
+    private ListView mDataField;
+    private String mDeviceName;
     private static final boolean AUTO_HIDE = true;
-    private static final String TAG = "xdclient";
+    private String mDeviceAddress;
     /**
      * If {@link #AUTO_HIDE} is set, the number of milliseconds to wait after
      * user interaction before hiding the system UI.
@@ -68,20 +69,11 @@ public class FullscreenActivity extends AppCompatActivity {
      */
     private static final int UI_ANIMATION_DELAY = 300;
     private final Handler mHideHandler = new Handler();
-    // media player
-
-//   private LibVLC libvlc;
-//    private MediaPlayer mMediaPlayer = null;
-
 
     private MediaPlayerWrapper mMediaPlayerWrapper = new MediaPlayerWrapper();
     private boolean bMediaPlayerWrapperisWorked = false;
     private MDVRLibrary mVRLibrary;
-    // private FFmpegMediaPlayer mMediaPlayer;
-//    private SurfaceView mmSurfaceView;
-//    private SurfaceHolder mSurfaceHolder;
-    private Surface mFinalSurface;
-    private CliProc mCliProc;
+    private BLEProc mBLEProc;
     private View mContentView_L, mContentView_R;
     private final Runnable mHidePart2Runnable = new Runnable() {
         @SuppressLint("InlinedApi")
@@ -158,66 +150,28 @@ public class FullscreenActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String permissions[], int[] grantResults) {
-        switch (requestCode) {
-            case SupportUtilsMtds.READ_EXTERNAL_STORAGE_PERMISSION_CODE: {
-                // If request is cancelled, the result arrays are empty.
-                if (grantResults.length > 0
-                        && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == SupportUtilsMtds.READ_EXTERNAL_STORAGE_PERMISSION_CODE ||
+                requestCode == SupportUtilsMtds.READ_BLUETOOTH_PERMISSION_CODE) {
+            // If request is cancelled, the result arrays are empty.
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
 
-                    // permission was granted, yay! Do it
-                    // filelist();
+                // permission was granted, yay! Do it
+                // filelist();
 
-                } else {
+            } else {
 
-                    // permission denied, boo!
-                    finish();
-                }
-                return;
+                // permission denied, boo!
+                finish();
             }
-
-
+            return;
         }
     }
-
-    protected void init() {
-        tmpGLSurfaceView = (GLSurfaceView) findViewById(R.id.surfaceview);
-        mVRLibrary = MDVRLibrary.with(this)
-                .displayMode(MDVRLibrary.DISPLAY_MODE_NORMAL)
-                .interactiveMode(MDVRLibrary.INTERACTIVE_MODE_MOTION)
-                .asVideo(new MDVRLibrary.IOnSurfaceReadyCallback() {
-                    @Override
-                    public void onSurfaceReady(Surface surface) {
-                        mMediaPlayerWrapper.setSurface(surface);
-                    }
-                })
-                .ifNotSupport(new MDVRLibrary.INotSupportCallback() {
-                    @Override
-                    public void onNotSupport(int mode) {
-                        String tip = mode == MDVRLibrary.INTERACTIVE_MODE_MOTION
-                                ? "onNotSupport:MOTION" : "onNotSupport:" + String.valueOf(mode);
-                        Toast.makeText(FullscreenActivity.this, tip, Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .pinchConfig(new MDPinchConfig().setMin(1.0f).setMax(8.0f).setDefaultValue(0.1f))
-                .pinchEnabled(true)
-                .directorFactory(new MD360DirectorFactory() {
-                    @Override
-                    public MD360Director createDirector(int index) {
-                        return MD360Director.builder().setPitch(90).build();
-                    }
-                })
-                .projectionFactory(new CustomProjectionFactory())
-                .barrelDistortionConfig(new BarrelDistortionConfig().setDefaultEnabled(false).setScale(0.95f))
-                .build(findViewById(R.id.surfaceview));
-
-
-    }
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mCliProc = CliProc.getInstance();
+        mBLEProc = BLEProc.getInstance();
         setContentView(R.layout.activity_fullscreen);
 
         loadValprefs();
@@ -290,8 +244,18 @@ public class FullscreenActivity extends AppCompatActivity {
         receiveFullMess();
     }
 
+    private void loadValprefs() {
+        // sVolume
+
+        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
+
+//        mBLEProc.sCliName = pref.getString(IS_CliName, mBLEProc.sCliName);
+        sVolume = pref.getInt(IS_sVolume, sVolume);
+
+
+    }
+
     public void cancelBusy() {
-        // FIXME: 09.08.2017 Set clear in future
         showFullMess("");
     }
 
@@ -348,11 +312,7 @@ public class FullscreenActivity extends AppCompatActivity {
 
     private void fire_Play(Uri media) {
         reset_MediaPlay();
-
-
         if (media != null) {
-
-
             mMediaPlayerWrapper.openRemoteFile(media.toString());
             mMediaPlayerWrapper.prepare();
             bMediaPlayerWrapperisWorked = true;
@@ -376,82 +336,39 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     }
 
-    private void tuneMPlay(String strmedia) {
-        mVRLibrary.switchDisplayMode(this, MDVRLibrary.DISPLAY_MODE_GLASS);
-        mVRLibrary.switchInteractiveMode(this, MDVRLibrary.INTERACTIVE_MODE_CARDBORAD_MOTION);
-//        mVRLibrary.switchDisplayMode(this, MDVRLibrary.DISPLAY_MODE_NORMAL);
+    protected void init() {
+        tmpGLSurfaceView = findViewById(R.id.surfaceview);
+        mVRLibrary = MDVRLibrary.with(this)
+                .displayMode(MDVRLibrary.DISPLAY_MODE_NORMAL)
+                .interactiveMode(MDVRLibrary.INTERACTIVE_MODE_MOTION)
+                .asVideo(new MDVRLibrary.IOnSurfaceReadyCallback() {
+                    @Override
+                    public void onSurfaceReady(Surface surface) {
+                        mMediaPlayerWrapper.setSurface(surface);
+                    }
+                })
+                .ifNotSupport(new MDVRLibrary.INotSupportCallback() {
+                    @Override
+                    public void onNotSupport(int mode) {
+                        String tip = mode == MDVRLibrary.INTERACTIVE_MODE_MOTION
+                                ? "onNotSupport:MOTION" : "onNotSupport:" + String.valueOf(mode);
+                        Toast.makeText(FullscreenActivity.this, tip, Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .pinchConfig(new MDPinchConfig().setMin(1.0f).setMax(8.0f).setDefaultValue(0.1f))
+                .pinchEnabled(true)
+                .directorFactory(new MD360DirectorFactory() {
+                    @Override
+                    public MD360Director createDirector(int index) {
+                        return MD360Director.builder().setPitch(90).build();
+                    }
+                })
+                .projectionFactory(new CustomProjectionFactory())
+                .barrelDistortionConfig(new BarrelDistortionConfig().setDefaultEnabled(false).setScale(0.95f))
+                .build(findViewById(R.id.surfaceview));
 
-        mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_PLANE_FULL);
-
-
-//            case PLANE_FIT: {
-//                mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_PLANE_FIT);
-//            }
-//            break;
-//            case PLANE_UPPUND: {
-//                mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_PLANE_FIT);
-//            }
-//            break;
-//
-//            case SPHERE: {
-//                mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_SPHERE);
-//            }
-//            break;
-//
-//
-//            case STEREO_H_SPHERE: {
-//                mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_STEREO_SPHERE_HORIZONTAL);
-//            }
-//
-//            case STEREO_V_SPHERE: {
-//                mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_STEREO_SPHERE_VERTICAL);
-//            }
-
-        mVRLibrary.setAntiDistortionEnabled(true);
 
     }
-
-    public void receiveFullMess() {
-
-        mCliProc.messsubject
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.io())
-//                .subscribeOn(Schedulers.computation())
-                .subscribe(new Consumer<String>() {
-                    @Override
-                    public void accept(@NonNull String v) throws Exception {
-//                        Log.v(TAG, "accept() mCliProc.messsubject called with: v = [" + v + "]");
-                        //  mServerItemsAdapter .reset();
-//                        if (v.regionMatches(true, 0, CommandSymbol, 0, 2)) {
-//                            doMessSelector(v.substring(2));
-//                        } else {
-//
-//                            showFullMess("mess>" + v);
-//                        }
-
-                    }
-                });
-        mCliProc.pingsubject
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.io())
-
-                .subscribe(new Consumer<String>() {
-                    @Override
-                    public void accept(@NonNull String v) throws Exception {
-                        Log.v(TAG, "accept() mCliProc.pingsubject called with: v = [" + v + "]");
-                        //  mServerItemsAdapter .reset();
-//                        if (v.regionMatches(true, 0, CommandSymbol, 0, 2)) {
-//                            doPingSelector(v.substring(2));
-//                        } else {
-//
-//                            showFullMess("pingsubject>" + v);
-//                        }
-
-                    }
-                });
-
-    }
-
 
     private void checkfile() {
         //check for permission
@@ -462,9 +379,53 @@ public class FullscreenActivity extends AppCompatActivity {
                 requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, SupportUtilsMtds
                         .READ_EXTERNAL_STORAGE_PERMISSION_CODE);
             }
-        } else {
-            ; //filelist();
         }
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_DENIED) {
+            //ask for permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH, Manifest.permission
+                        .BLUETOOTH_ADMIN}, SupportUtilsMtds
+                        .READ_BLUETOOTH_PERMISSION_CODE);
+            }
+        } else {
+            //filelist();
+        }
+    }
+
+    public void receiveFullMess() {
+
+        mBLEProc.messsubject
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+//                .subscribeOn(Schedulers.computation())
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(@NonNull String v) {
+//                        Log.v(TAG, "accept() mBLEProc.messsubject called with: v = [" + v + "]");
+                        //  mServerItemsAdapter .reset();
+//                        if (v.regionMatches(true, 0, CommandSymbol, 0, 2)) {
+//                            doMessSelector(v.substring(2));
+//                        } else {
+//
+//                            showFullMess("mess>" + v);
+//                        }
+
+                    }
+                });
+        mBLEProc.pingsubject
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(@NonNull String v) {
+                        Log.v(TAG, "accept() mBLEProc.pingsubject called with: v = [" + v + "]");
+
+
+                    }
+                });
+
     }
 
     private void startFile(String substring) {
@@ -558,6 +519,33 @@ public class FullscreenActivity extends AppCompatActivity {
         mHideHandler.postDelayed(mHideRunnable, delayMillis);
     }
 
+    private void tuneMPlay(String strmedia) {
+        mVRLibrary.switchDisplayMode(this, MDVRLibrary.DISPLAY_MODE_GLASS);
+        mVRLibrary.switchInteractiveMode(this, MDVRLibrary.INTERACTIVE_MODE_CARDBORAD_MOTION);
+//        mVRLibrary.switchDisplayMode(this, MDVRLibrary.DISPLAY_MODE_NORMAL);
+
+        mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_PLANE_FULL);
+        mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_STEREO_SPHERE_VERTICAL);
+
+        mVRLibrary.setAntiDistortionEnabled(true);
+
+    }
+
+    private void saveValprefs(String s, String s1, int progress) {
+        // sVolume
+        sVolume = progress;
+
+
+        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
+        editor = pref.edit();
+
+        editor.putInt(IS_sVolume, sVolume);
+
+        editor.commit();
+
+
+    }
+
     private void d_setupPrefs_dialog() {
 
 
@@ -567,14 +555,14 @@ public class FullscreenActivity extends AppCompatActivity {
         dialog.setCancelable(false); //none-dismiss when touching outside Dialog
 //sound vol and addr
 
-        ImageView simageView = (ImageView) dialog.findViewById(R.id.imageView);
+        ImageView simageView = dialog.findViewById(R.id.imageView);
 
 
-        final EditText tServer_addr = (EditText) dialog.findViewById(R.id.server_addr);
+        final EditText tServer_addr = dialog.findViewById(R.id.server_addr);
         tServer_addr.setText("222");
-        final EditText tsCliName = (EditText) dialog.findViewById(R.id.cliName);
+        final EditText tsCliName = dialog.findViewById(R.id.cliName);
         tsCliName.setText("222");
-        final SeekBar soundvolseekBar = (SeekBar) dialog.findViewById(R.id.soundvolseekBar);
+        final SeekBar soundvolseekBar = dialog.findViewById(R.id.soundvolseekBar);
         soundvolseekBar.setProgress(sVolume);
 //
 
@@ -604,32 +592,6 @@ public class FullscreenActivity extends AppCompatActivity {
             }
         });
         dialog.show();
-    }
-
-    private void saveValprefs(String s, String s1, int progress) {
-        // sVolume
-        sVolume = progress;
-
-
-        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
-        editor = pref.edit();
-
-        editor.putInt(IS_sVolume, sVolume);
-
-        editor.commit();
-
-
-    }
-
-    private void loadValprefs() {
-        // sVolume
-
-        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
-
-//        mCliProc.sCliName = pref.getString(IS_CliName, mCliProc.sCliName);
-        sVolume = pref.getInt(IS_sVolume, sVolume);
-
-
     }
 
 

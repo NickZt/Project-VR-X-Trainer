@@ -3,9 +3,7 @@
 
 Contains
 
-Android part of this project based on ashqal/MD360Player4Android
-
-
+Android part of this project based on 
 [![](https://jitpack.io/v/ashqal/MD360Player4Android.svg)](https://jitpack.io/#ashqal/MD360Player4Android)
 
 arduino sketch
