@@ -3,4 +3,7 @@
 
     <string name="dummy_button">Setup Call</string>
     <string name="start_content">VR-X-Trainer\nStep</string>
+    <string name="ble_not_supported">BLE is not supported</string>
+    <string name="permission_required">BLE permission must be required</string>
+    <string name="permission_required_EXTERNAL_STORAGE">EXTERNAL_STORAGE permission must be required</string>
 </resources>

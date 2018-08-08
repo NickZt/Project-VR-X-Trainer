@@ -22,7 +22,7 @@ public class SupportUtilsMtds {
     public static final int PRIVATE_MODE = 0;
 
 
-    public static final String FILE_EXT_PLAY = ".avi";
+    public static final String FILE_EXT_PLAY = ".mp4";
     public static final String ROOT_DIR = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).toString() + "/VRTren/";
     public static final String SD_DIR = Environment.getExternalStorageDirectory().toString() + "/Downloads"+ "/VRTren/";
     public static final int READ_EXTERNAL_STORAGE_PERMISSION_CODE = 1;

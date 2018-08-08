@@ -2,7 +2,13 @@ package ua.mezon.xtrainervr;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.Dialog;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothManager;
+import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -32,6 +38,8 @@ import com.asha.vrlib.MDVRLibrary;
 import com.asha.vrlib.model.BarrelDistortionConfig;
 import com.asha.vrlib.model.MDPinchConfig;
 
+import java.util.ArrayList;
+
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.annotations.NonNull;
 import io.reactivex.functions.Consumer;
@@ -43,16 +51,44 @@ import ua.mezon.xtrainervr.model.SupportUtilsMtds;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.IS_sVolume;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.PREF_NAME;
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.PRIVATE_MODE;
+import static ua.mezon.xtrainervr.model.SupportUtilsMtds.READ_BLUETOOTH_PERMISSION_CODE;
+import static ua.mezon.xtrainervr.model.SupportUtilsMtds.READ_EXTERNAL_STORAGE_PERMISSION_CODE;
 
 
 public class FullscreenActivity extends AppCompatActivity {
+    private static final int REQUEST_ENABLE_BT = 12;
+    private static final long SCAN_PERIOD = 10000;
+    private static final String URLEXT = "file:///storage/external_SD/Download/VRTren/VikingCoaster(3D).mp4";
+    //4.avi
+    private static final String TAG = "VRTrainer";
+    /**
+     * Touch listener to use for in-layout UI controls to delay hiding the
+     * system UI. This is to prevent the jarring behavior of controls going away
+     * while interacting with activity UI.
+     */
+    private final View.OnTouchListener mDelayHideTouchListener = new View.OnTouchListener() {
+        @Override
+        public boolean onTouch(View view, MotionEvent motionEvent) {
+            dialogSetupPrefs();
+            if (AUTO_HIDE) {
+                delayedHide(AUTO_HIDE_DELAY_MILLIS);
+            }
+
+
+            return false;
+        }
+    };
+    private BluetoothAdapter mBluetoothAdapter;
+    private boolean mScanning;
+
+
     /**
      * Whether or not the system UI should be auto-hidden after
      * {@link #AUTO_HIDE_DELAY_MILLIS} milliseconds.
      */
     private static final String URL0 = "file://";
-    private static final String URLEXT = "file:///storage/external_SD/Download/VRTren/";//4.avi
-    private static final String TAG = "VRTrainer";
+    private BLeDeviceList mBLeDeviceList;
+    private Handler mHandler;
     private TextView mConnectionState;
     private ListView mDataField;
     private String mDeviceName;
@@ -93,7 +129,22 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     };
     private TextView mTextContentView_L, mTextContentView_R;
+    // Device scan callback.
+    private BluetoothAdapter.LeScanCallback mLeScanCallback =
+            new BluetoothAdapter.LeScanCallback() {
 
+                @Override
+                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mBLeDeviceList.addDevice(device);
+                            Log.d(TAG, "TODEL run() called " + device.toString());
+
+                        }
+                    });
+                }
+            };
     private View mControlsView;
     private final Runnable mShowPart2Runnable = new Runnable() {
         @Override
@@ -107,7 +158,7 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     };
     private boolean mVisible;
-    private String mServerNAME = "";
+    private GLSurfaceView tmpGLSurfaceView;
 
     private final Runnable mHideRunnable = new Runnable() {
         @Override
@@ -118,29 +169,50 @@ public class FullscreenActivity extends AppCompatActivity {
     private int sVolume = 20;
     private SharedPreferences pref;
     private SharedPreferences.Editor editor;
-
-
-    private GLSurfaceView tmpGLSurfaceView;
-
-    /**
-     * Touch listener to use for in-layout UI controls to delay hiding the
-     * system UI. This is to prevent the jarring behavior of controls going away
-     * while interacting with activity UI.
-     */
-    private final View.OnTouchListener mDelayHideTouchListener = new View.OnTouchListener() {
-        @Override
-        public boolean onTouch(View view, MotionEvent motionEvent) {
-            d_setupPrefs_dialog();
-            if (AUTO_HIDE) {
-                delayedHide(AUTO_HIDE_DELAY_MILLIS);
-            }
-
-
-            return false;
-        }
-    };
+    private String mServerNAME = "b";
     private boolean mbMediaPlayerWrapperisPaused = false;
 
+    /* check if user agreed to enable BT */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // user didn't want to turn on BT
+        // User chose not to enable Bluetooth.
+        if (requestCode == REQUEST_ENABLE_BT && resultCode == Activity.RESULT_CANCELED) {
+            finish();
+            return;
+        }
+
+        super.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (mVRLibrary != null) {
+            mVRLibrary.onPause(this);
+        }
+        if (mMediaPlayerWrapper != null) {
+            mMediaPlayerWrapper.pause();
+        }
+        if (mBluetoothAdapter != null) {
+            scanLeDevice(false);
+            mBLeDeviceList.clear();
+        }
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        // onresumePermissionCheck();
+        if (mVRLibrary != null) {
+            mVRLibrary.onResume(this);
+        }
+        if (mMediaPlayerWrapper != null) {
+            mMediaPlayerWrapper.resume();
+        }
+    }
 
     /*************
      * Events
@@ -158,6 +230,7 @@ public class FullscreenActivity extends AppCompatActivity {
 
                 // permission was granted, yay! Do it
                 // filelist();
+                initBLE();
 
             } else {
 
@@ -166,82 +239,6 @@ public class FullscreenActivity extends AppCompatActivity {
             }
             return;
         }
-    }
-
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mBLEProc = BLEProc.getInstance();
-        setContentView(R.layout.activity_fullscreen);
-
-        loadValprefs();
-        mVisible = true;
-        mControlsView = findViewById(R.id.fullscreen_content_controls);
-        mContentView_L = findViewById(R.id.fullscreen_content_L);
-        mContentView_R = findViewById(R.id.fullscreen_content_R);
-        mTextContentView_L = (TextView) mContentView_L;
-        mTextContentView_R = (TextView) mContentView_R;
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // Set up the user interaction to manually show or hide the system UI.
-        mContentView_L.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                toggle();
-            }
-        });
-
-        // Upon interacting with UI controls, delay any scheduled hide()
-        // operations to prevent the jarring behavior of controls going away
-        // while interacting with the UI.
-        findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
-        //  mServProc.mMainWebSocket.getServer().
-
-
-        // set up the Surface video sink
-        init();
-
-
-        mMediaPlayerWrapper.init();
-        mMediaPlayerWrapper.setPreparedListener(new IMediaPlayer.OnPreparedListener() {
-            @Override
-            public void onPrepared(IMediaPlayer mp) {
-                cancelBusy();
-                if (getVRLibrary() != null) {
-                    getVRLibrary().notifyPlayerChanged();
-                }
-            }
-        });
-        mMediaPlayerWrapper.setmCompletionListener(new IMediaPlayer.OnCompletionListener() {
-            @Override
-            public void onCompletion(IMediaPlayer iMediaPlayer) {
-                Toast.makeText(FullscreenActivity.this, "The end", Toast.LENGTH_SHORT).show();
-
-                reset_MediaPlay();
-            }
-        });
-
-
-        mMediaPlayerWrapper.getPlayer().setOnErrorListener(new IMediaPlayer.OnErrorListener() {
-            @Override
-            public boolean onError(IMediaPlayer mp, int what, int extra) {
-                String error = String.format("Play Error what=%d extra=%d", what, extra);
-                Toast.makeText(FullscreenActivity.this, error, Toast.LENGTH_SHORT).show();
-                return true;
-            }
-        });
-
-        mMediaPlayerWrapper.getPlayer().setOnVideoSizeChangedListener(new IMediaPlayer
-                .OnVideoSizeChangedListener() {
-            @Override
-            public void onVideoSizeChanged(IMediaPlayer mp, int width, int height, int sar_num, int sar_den) {
-                getVRLibrary().onTextureResize(width, height);
-            }
-        });
-
-
-        checkfile();
-        receiveFullMess();
     }
 
     private void loadValprefs() {
@@ -264,62 +261,190 @@ public class FullscreenActivity extends AppCompatActivity {
         return mVRLibrary;
     }
 
+    private void initBLE() {
+        // Initializes a Bluetooth adapter.  For API level 18 and above, get a reference to
+        // BluetoothAdapter through BluetoothManager.
+        final BluetoothManager bluetoothManager =
+                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        mBluetoothAdapter = bluetoothManager.getAdapter();
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mVRLibrary.onResume(this);
-        mMediaPlayerWrapper.resume();
+        // Checks if Bluetooth is supported on the device.
+        if (mBluetoothAdapter == null) {
+            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
+            finish();
+            return;
+        }
+        // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
+        // fire an intent to display a dialog asking the user to grant permission to enable it.
+        if (!mBluetoothAdapter.isEnabled()) {
+            if (!mBluetoothAdapter.isEnabled()) {
+                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+            }
+        }
+        //   mBluetoothAdapter.stopLeScan(mLeScanCallback);
+        // Initializes list view adapter.
+
+        scanLeDevice(true);
+
+    }
+
+    private void scanLeDevice(final boolean enable) {
+        if (enable) {
+            // Stops scanning after a pre-defined scan period.
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    mScanning = false;
+                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
+                    invalidateOptionsMenu();
+                }
+            }, SCAN_PERIOD);
+
+            mScanning = true;
+            mBluetoothAdapter.startLeScan(mLeScanCallback);
+        } else {
+            mScanning = false;
+            mBluetoothAdapter.stopLeScan(mLeScanCallback);
+        }
+        invalidateOptionsMenu();
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        mVRLibrary.onPause(this);
-        mMediaPlayerWrapper.pause();
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_fullscreen);
+
+        // Use this check to determine whether BLE is supported on the device.  Then you can
+        // selectively disable BLE-related features.
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
+            // finish();
+        }
+        checkPermission();
+
+        mBLEProc = BLEProc.getInstance();
+
+
+        loadValprefs();
+        mVisible = true;
+        mControlsView = findViewById(R.id.fullscreen_content_controls);
+        mContentView_L = findViewById(R.id.fullscreen_content_L);
+        mContentView_R = findViewById(R.id.fullscreen_content_R);
+        mTextContentView_L = (TextView) mContentView_L;
+        mTextContentView_R = (TextView) mContentView_R;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // Set up the user interaction to manually show or hide the system UI.
+        mContentView_L.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                toggle();
+            }
+        });
+
+        // Upon interacting with UI controls, delay any scheduled hide()
+        // operations to prevent the jarring behavior of controls going away
+        // while interacting with the UI.
+        findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+
+        setuptheSurfacevideo();
+
+
+        mHandler = new Handler();
+
+
+        //  receiveMessagesFromBLE();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mVRLibrary.onDestroy();
-        mMediaPlayerWrapper.destroy();
-    }
-
-    private void setPlayer(String strmedia) {
-        if (strmedia == null) {
-            return;
+        if (mVRLibrary != null) {
+            mVRLibrary.onDestroy();
         }
-        //init();
-
-
-        Uri media = Uri.parse(URL0 + SupportUtilsMtds.ROOT_DIR + strmedia);
-
-
-        if (!TextUtils.isEmpty(media.toString())) {
-//                Toast toast = Toast.makeText(this, media.toString(), Toast.LENGTH_LONG);
-//                toast.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0);
-//                toast.show();
-        }
-
-
-        tuneMPlay(strmedia);
-
-        fire_Play(media);
-
-
-    }
-
-    private void fire_Play(Uri media) {
-        reset_MediaPlay();
-        if (media != null) {
-            mMediaPlayerWrapper.openRemoteFile(media.toString());
-            mMediaPlayerWrapper.prepare();
-            bMediaPlayerWrapperisWorked = true;
+        if (mMediaPlayerWrapper != null) {
+            mMediaPlayerWrapper.destroy();
         }
     }
 
-    private void reset_MediaPlay() {
+    private void checkPermission() {
+        //check for permission
+        // Use this check to determine whether BLE is supported on the device.  Then you can
+        // selectively disable BLE-related features.
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
+            // finish();
+        }
+        Log.d(TAG, "TODEL checkPermission(LUETOOTH_ADMIN) called " + (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.BLUETOOTH_ADMIN) == PackageManager.PERMISSION_DENIED));
+        Log.d(TAG, "TODEL checkPermission() called " + (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_DENIED));
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_DENIED) {
+            //ask for permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH, Manifest.permission
+                                .BLUETOOTH_ADMIN},
+                        READ_BLUETOOTH_PERMISSION_CODE);
+            }
+        }
+        if (ContextCompat.checkSelfPermission(this,
+                Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
+            //ask for permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE, Manifest
+                                .permission.BLUETOOTH, Manifest.permission
+                                .BLUETOOTH_ADMIN},
+                        READ_EXTERNAL_STORAGE_PERMISSION_CODE);
+            }
+        } else {
+            initBLE();
+        }
+    }
+
+    private void setuptheSurfacevideo() {
+        // set up the Surface video sink
+        init();
+        mMediaPlayerWrapper.init();
+        mMediaPlayerWrapper.setPreparedListener(new IMediaPlayer.OnPreparedListener() {
+            @Override
+            public void onPrepared(IMediaPlayer mp) {
+                cancelBusy();
+                if (getVRLibrary() != null) {
+                    getVRLibrary().notifyPlayerChanged();
+                }
+            }
+        });
+        mMediaPlayerWrapper.setmCompletionListener(new IMediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(IMediaPlayer iMediaPlayer) {
+                Toast.makeText(FullscreenActivity.this, "The end", Toast.LENGTH_SHORT).show();
+
+                resetMediaPlay();
+            }
+        });
+
+
+        mMediaPlayerWrapper.getPlayer().setOnErrorListener(new IMediaPlayer.OnErrorListener() {
+            @Override
+            public boolean onError(IMediaPlayer mp, int what, int extra) {
+                String error = String.format("Play Error what=%d extra=%d", what, extra);
+                Toast.makeText(FullscreenActivity.this, error, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+        });
+
+        mMediaPlayerWrapper.getPlayer().setOnVideoSizeChangedListener(new IMediaPlayer
+                .OnVideoSizeChangedListener() {
+            @Override
+            public void onVideoSizeChanged(IMediaPlayer mp, int width, int height, int sar_num, int sar_den) {
+                getVRLibrary().onTextureResize(width, height);
+            }
+        });
+    }
+
+    private void resetMediaPlay() {
         if (bMediaPlayerWrapperisWorked) {//mMediaPlayerWrapper.getPlayer().isPlaying(
             mMediaPlayerWrapper.pause();
             mMediaPlayerWrapper.stop();
@@ -370,30 +495,27 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
-    private void checkfile() {
-        //check for permission
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_DENIED) {
-            //ask for permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, SupportUtilsMtds
-                        .READ_EXTERNAL_STORAGE_PERMISSION_CODE);
-            }
-        }
-        if (ContextCompat.checkSelfPermission(this,
-                Manifest.permission.BLUETOOTH) == PackageManager.PERMISSION_DENIED) {
-            //ask for permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                requestPermissions(new String[]{Manifest.permission.BLUETOOTH, Manifest.permission
-                        .BLUETOOTH_ADMIN}, SupportUtilsMtds
-                        .READ_BLUETOOTH_PERMISSION_CODE);
+    private void onresumePermissionCheck() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+
+            if ((this.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager
+                    .PERMISSION_GRANTED)
+                    || (this.checkSelfPermission(Manifest.permission.BLUETOOTH) != PackageManager
+                    .PERMISSION_GRANTED)
+                    || (this.checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager
+                    .PERMISSION_GRANTED)) {
+                this.requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest
+                        .permission.BLUETOOTH
+                        , Manifest.permission.BLUETOOTH_ADMIN}, READ_BLUETOOTH_PERMISSION_CODE);
+            } else {
+                initBLE();
             }
         } else {
-            //filelist();
+            initBLE();
         }
     }
 
-    public void receiveFullMess() {
+    public void receiveMessagesFromBLE() {
 
         mBLEProc.messsubject
                 .observeOn(AndroidSchedulers.mainThread())
@@ -433,7 +555,7 @@ public class FullscreenActivity extends AppCompatActivity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         if (!mbMediaPlayerWrapperisPaused) {
-            reset_MediaPlay();
+            resetMediaPlay();
             setPlayer(substring);
 
         } else {
@@ -445,10 +567,21 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
+    private void setPlayer(String strmedia) {
+        if (strmedia == null) {
+            return;
+        }
+        Uri media = Uri.parse(URL0 + SupportUtilsMtds.ROOT_DIR + strmedia);
 
-    private void resetFile() {
-        reset_MediaPlay();
-        mbMediaPlayerWrapperisPaused = false;
+        if (!TextUtils.isEmpty(media.toString())) {
+//                Toast toast = Toast.makeText(this, media.toString(), Toast.LENGTH_LONG);
+//                toast.setGravity(Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, 0);
+//                toast.show();
+        }
+        tuneMPlay(strmedia);
+        startPlay(media);
+
+
     }
 
     private void pauseFile() {
@@ -525,28 +658,27 @@ public class FullscreenActivity extends AppCompatActivity {
 //        mVRLibrary.switchDisplayMode(this, MDVRLibrary.DISPLAY_MODE_NORMAL);
 
         mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_PLANE_FULL);
-        mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_STEREO_SPHERE_VERTICAL);
+        mVRLibrary.switchProjectionMode(this, MDVRLibrary.PROJECTION_MODE_STEREO_SPHERE_HORIZONTAL);
 
         mVRLibrary.setAntiDistortionEnabled(true);
-
+//VMMD
     }
 
-    private void saveValprefs(String s, String s1, int progress) {
-        // sVolume
-        sVolume = progress;
-
-
-        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
-        editor = pref.edit();
-
-        editor.putInt(IS_sVolume, sVolume);
-
-        editor.commit();
-
-
+    private void startPlay(Uri media) {
+        resetMediaPlay();
+        if (media != null) {
+            mMediaPlayerWrapper.openRemoteFile(media.toString());
+            mMediaPlayerWrapper.prepare();
+            bMediaPlayerWrapperisWorked = true;
+        }
     }
 
-    private void d_setupPrefs_dialog() {
+    private void resetFile() {
+        resetMediaPlay();
+        mbMediaPlayerWrapperisPaused = false;
+    }
+
+    private void dialogSetupPrefs() {
 
 
         final Dialog dialog = new Dialog(this);
@@ -577,7 +709,7 @@ public class FullscreenActivity extends AppCompatActivity {
             public void onClick(View view) {      //onConfirmListener
 
 
-                saveValprefs(String.valueOf(tServer_addr.getText()), String.valueOf(tsCliName.getText()),
+                saveValuesToPrefs(String.valueOf(tServer_addr.getText()), String.valueOf(tsCliName.getText()),
                         soundvolseekBar.getProgress());
 
                 dialog.dismiss();
@@ -594,5 +726,45 @@ public class FullscreenActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    private void saveValuesToPrefs(String s, String s1, int progress) {
+        // sVolume
+        sVolume = progress;
 
+
+        pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
+        editor = pref.edit();
+
+        editor.putInt(IS_sVolume, sVolume);
+
+        editor.commit();
+
+
+    }
+
+    private class BLeDeviceList {
+        private ArrayList<BluetoothDevice> mLeDevices;
+
+
+        public BLeDeviceList() {
+            super();
+            mLeDevices = new ArrayList<BluetoothDevice>();
+        }
+
+        public void addDevice(BluetoothDevice device) {
+            if (!mLeDevices.contains(device)) {
+
+                mLeDevices.add(device);
+            }
+        }
+
+        public BluetoothDevice getDevice(int position) {
+            return mLeDevices.get(position);
+        }
+
+        public void clear() {
+            mLeDevices.clear();
+        }
+
+
+    }
 }
