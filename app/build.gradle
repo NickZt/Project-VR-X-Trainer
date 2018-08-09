@@ -22,7 +22,9 @@ android {
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     testImplementation 'junit:junit:4.12'
+    implementation "com.don11995.log:simple-log:1.4.1"
 
+    annotationProcessor "com.don11995.log:simple-log-processor:1.4.1"
     //1.4.1
     implementation 'com.android.support:appcompat-v7:27.1.1'
     implementation 'com.squareup.picasso:picasso:2.5.2'
@@ -34,8 +36,5 @@ dependencies {
     implementation project(path: ':vrlib')
     implementation 'io.reactivex.rxjava2:rxjava:2.1.14'
     implementation 'io.reactivex.rxjava2:rxandroid:2.0.2'
-
-   // annotationProcessor 'com.don11995.log:simple-log-processor:1.4.1'
- //   implemetation 'com.don11995.log:simple-log:1.4.1'
 
 }
