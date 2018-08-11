@@ -21,7 +21,6 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.ListView;
 import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -42,7 +41,7 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
-import ua.mezon.xtrainervr.model.BLEProc;
+import ua.mezon.xtrainervr.model.BLEProcImpl;
 import ua.mezon.xtrainervr.model.SupportUtilsMtds;
 
 import static ua.mezon.xtrainervr.model.SupportUtilsMtds.IS_sVolume;
@@ -94,13 +93,10 @@ public class FullscreenActivity extends AppCompatActivity {
     };
 
 
-    private TextView mConnectionState;
-    private ListView mDataField;
-    private String mDeviceName;
     private MediaPlayerWrapper mMediaPlayerWrapper = new MediaPlayerWrapper();
     private boolean bMediaPlayerWrapperisWorked = false;
     private MDVRLibrary mVRLibrary;
-    private BLEProc mBLEProc;
+    private BLEConnector mBLEProc;
     private View mContentView_L, mContentView_R;
     private final Runnable mHidePart2Runnable = new Runnable() {
         @SuppressLint("InlinedApi")
@@ -220,7 +216,7 @@ public class FullscreenActivity extends AppCompatActivity {
     }
 
     public void cancelBusy() {
-        showFullMess("");
+        showMessDirect("");
     }
 
 
@@ -228,49 +224,10 @@ public class FullscreenActivity extends AppCompatActivity {
         return mVRLibrary;
     }
 
+    public void showMessDirect(String tmp) {
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_fullscreen);
-
-        // Use this check to determine whether BLE is supported on the device.  Then you can
-        // selectively disable BLE-related features.
-        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
-            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
-            // finish();
-        }
-
-
-        mBLEProc = BLEProc.getInstance();
-
-
-        loadValprefs();
-        mVisible = true;
-        mControlsView = findViewById(R.id.fullscreen_content_controls);
-        mContentView_L = findViewById(R.id.fullscreen_content_L);
-        mContentView_R = findViewById(R.id.fullscreen_content_R);
-        mTextContentView_L = (TextView) mContentView_L;
-        mTextContentView_R = (TextView) mContentView_R;
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-
-        // Set up the user interaction to manually show or hide the system UI.
-        mContentView_L.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                toggle();
-            }
-        });
-
-        // Upon interacting with UI controls, delay any scheduled hide()
-        // operations to prevent the jarring behavior of controls going away
-        // while interacting with the UI.
-        findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
-        checkPermission();
-//        setuptheSurfacevideo();
-
-
-        receiveMessagesFromBLE();
+        mTextContentView_L.setText(tmp);
+        mTextContentView_R.setText(tmp);
     }
 
     private void checkPermission() {
@@ -394,9 +351,64 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_fullscreen);
+
+        // Use this check to determine whether BLE is supported on the device.  Then you can
+        // selectively disable BLE-related features.
+        if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE)) {
+            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
+            // finish();
+        }
+
+
+        mBLEProc = BLEProcImpl.getInstance();
+
+
+        loadValprefs();
+        mVisible = true;
+        mControlsView = findViewById(R.id.fullscreen_content_controls);
+        mContentView_L = findViewById(R.id.fullscreen_content_L);
+        mContentView_R = findViewById(R.id.fullscreen_content_R);
+        mTextContentView_L = (TextView) mContentView_L;
+        mTextContentView_R = (TextView) mContentView_R;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        // Set up the user interaction to manually show or hide the system UI.
+        mContentView_L.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                toggle();
+            }
+        });
+
+        // Upon interacting with UI controls, delay any scheduled hide()
+        // operations to prevent the jarring behavior of controls going away
+        // while interacting with the UI.
+        findViewById(R.id.dummy_button).setOnTouchListener(mDelayHideTouchListener);
+        checkPermission();
+//        setuptheSurfacevideo();
+
+
+        receiveMessagesFromBLE();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (mVRLibrary != null) {
+            mVRLibrary.onDestroy();
+        }
+        if (mMediaPlayerWrapper != null) {
+            mMediaPlayerWrapper.destroy();
+        }
+    }
+
     public void receiveMessagesFromBLE() {
 
-        mBLEProc.messsubject
+        mBLEProc.getMesssubject()
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribeOn(Schedulers.io())
 //                .subscribeOn(Schedulers.computation())
@@ -411,7 +423,7 @@ public class FullscreenActivity extends AppCompatActivity {
                         SimpleLog.v("TODEL onNext mBLEProc.messsubject called with: v = [" + v + "]");
                         mBLEDeviceNAME = v;
                         mBLEDeviceConnected = false;
-                        showFullMess("Finded  device NAME> " + mBLEDeviceNAME);
+                        showMessage();
                     }
 
                     @Override
@@ -420,17 +432,19 @@ public class FullscreenActivity extends AppCompatActivity {
 
                     @Override
                     public void onComplete() {
+                        SimpleLog.v("TODEL Messsubject onComplete()");
                         mBLEDeviceConnected = true;
+                        showMessage();
                     }
                 });
-        mBLEProc.pingsubject
+        Disposable tmpPingsubject = mBLEProc.getPingsubject()
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribeOn(Schedulers.io())
 
                 .subscribe(new Consumer<String>() {
                     @Override
                     public void accept(@NonNull String v) {
-                        SimpleLog.v("accept() mBLEProc.pingsubject called with: v = [" + v + "]");
+                        SimpleLog.v("TODEL accept() mBLEProc.pingsubject called with: v = [" + v + "]");
 
 
                     }
@@ -438,36 +452,16 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        if (mVRLibrary != null) {
-            mVRLibrary.onDestroy();
-        }
-        if (mMediaPlayerWrapper != null) {
-            mMediaPlayerWrapper.destroy();
-        }
-    }
-
-    private void resetMediaPlay() {
-        if (bMediaPlayerWrapperisWorked) {//mMediaPlayerWrapper.getPlayer().isPlaying(
-            mMediaPlayerWrapper.pause();
-            mMediaPlayerWrapper.stop();
-            mMediaPlayerWrapper.destroy();
-            mMediaPlayerWrapper.init();
-            bMediaPlayerWrapperisWorked = false;
-
-
-            if (mBLEDeviceNAME.equals("")) {
-                showFullMess("VR-X-Trainer");
+    private void showMessage() {
+        if (mBLEDeviceNAME.equals("")) {
+            showMessDirect("VR-X-Trainer");
+        } else {
+            if (mBLEDeviceConnected) {
+                showMessDirect("Connected to device NAME>" + mBLEDeviceNAME);
             } else {
-                if (mBLEDeviceConnected) {
-                    showFullMess("Finded  device NAME> " + mBLEDeviceNAME);
-                } else {
-                    showFullMess("Connected to device NAME>" + mBLEDeviceNAME);
-                }
-
+                showMessDirect("Finded  device NAME> " + mBLEDeviceNAME);
             }
+
         }
     }
 
@@ -512,10 +506,17 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     }
 
-    public void showFullMess(String tmp) {
+    private void resetMediaPlay() {
+        if (bMediaPlayerWrapperisWorked) {//mMediaPlayerWrapper.getPlayer().isPlaying(
+            mMediaPlayerWrapper.pause();
+            mMediaPlayerWrapper.stop();
+            mMediaPlayerWrapper.destroy();
+            mMediaPlayerWrapper.init();
+            bMediaPlayerWrapperisWorked = false;
 
-        mTextContentView_L.setText(tmp);
-        mTextContentView_R.setText(tmp);
+
+            showMessage();
+        }
     }
 
     @Override

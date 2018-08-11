@@ -20,6 +20,7 @@ public class GattAttributes {
     public final static String EXTRA_DATA =
             "ua.mezon.xtrainervr.EXTRA_DATA";
 
+    final static public UUID DEVICE_NAME_STRING = UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb");
     final static public UUID MANUFACTURER_STRING = UUID.fromString("00002a29-0000-1000-8000-00805f9b34fb");
     final static public UUID MODEL_NUMBER_STRING = UUID.fromString("00002a24-0000-1000-8000-00805f9b34fb");
     final static public UUID FIRMWARE_REVISION_STRING = UUID.fromString("00002a26-0000-1000-8000-00805f9b34fb");
@@ -27,7 +28,7 @@ public class GattAttributes {
     final static public UUID BODY_SENSOR_LOCATION = UUID.fromString("00002a38-0000-1000-8000-00805f9b34fb");
     final static public UUID BATTERY_LEVEL = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb");
     public static String HEART_RATE_MEASUREMENT = "00002a37-0000-1000-8000-00805f9b34fb";
-    public static String CLIENT_CHARACTERISTIC_CONFIG = "00002902-0000-1000-8000-00805f9b34fb";
+    public static UUID CLIENT_CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static HashMap<String, String> attributes = new HashMap();
     private static SparseArray<String> mValueFormats = new SparseArray<String>();
 
@@ -88,8 +89,8 @@ public class GattAttributes {
         attributes.put("00002a64-0000-1000-8000-00805f9b34fb", "Cycling Power Vector");
         attributes.put("00002a08-0000-1000-8000-00805f9b34fb", "Date Time");
         attributes.put("00002a0a-0000-1000-8000-00805f9b34fb", "Day Date Time");
-        attributes.put("00002a09-0000-1000-8000-00805f9b34fb", "Day of Week");
         attributes.put("00002a00-0000-1000-8000-00805f9b34fb", "Device Name");
+        attributes.put("00002a09-0000-1000-8000-00805f9b34fb", "Day of Week");
         attributes.put("00002a0d-0000-1000-8000-00805f9b34fb", "DST Offset");
         attributes.put("00002a0c-0000-1000-8000-00805f9b34fb", "Exact Time 256");
         attributes.put("00002a26-0000-1000-8000-00805f9b34fb", "Firmware Revision String");
@@ -147,6 +148,7 @@ public class GattAttributes {
         attributes.put("00002a0e-0000-1000-8000-00805f9b34fb", "Time Zone");
         attributes.put("00002a07-0000-1000-8000-00805f9b34fb", "Tx Power Level");
         attributes.put("00002a45-0000-1000-8000-00805f9b34fb", "Unread Alert Status");
+        attributes.put("00002AA6-0000-1000-8000-00805f9b34fb", "Central Address Resolution");
 
 
         mValueFormats.put(Integer.valueOf(52), "32bit float");
@@ -157,7 +159,55 @@ public class GattAttributes {
         mValueFormats.put(Integer.valueOf(18), "16bit unsigned int");
         mValueFormats.put(Integer.valueOf(20), "32bit unsigned int");
         mValueFormats.put(Integer.valueOf(17), "8bit unsigned int");
-
+        mValueFormats.put(0, "Z Unknown");
+        mValueFormats.put(64, "Generic Phone");
+        mValueFormats.put(128, "Generic Computer");
+        mValueFormats.put(192, "Generic Watch");
+        mValueFormats.put(193, "Watch: Sports Watch");
+        mValueFormats.put(256, "Generic Clock");
+        mValueFormats.put(320, "Generic Display");
+        mValueFormats.put(384, "Generic Remote Control");
+        mValueFormats.put(448, "Generic Eye-glasses");
+        mValueFormats.put(512, "Generic Tag");
+        mValueFormats.put(576, "Generic Keyring");
+        mValueFormats.put(640, "Generic Media Player");
+        mValueFormats.put(704, "Generic Barcode Scanner");
+        mValueFormats.put(768, "Generic Thermometer");
+        mValueFormats.put(769, "Thermometer: Ear");
+        mValueFormats.put(832, "Generic Heart rate Sensor");
+        mValueFormats.put(833, "Heart Rate Sensor: Heart Rate Belt");
+        mValueFormats.put(896, "Generic Blood Pressure");
+        mValueFormats.put(897, "Blood Pressure: Arm");
+        mValueFormats.put(898, "Blood Pressure: Wrist");
+        mValueFormats.put(960, "Human Interface Device (HID)");
+        mValueFormats.put(961, "Keyboard");
+        mValueFormats.put(962, "Mouse");
+        mValueFormats.put(963, "Joystick");
+        mValueFormats.put(964, "Gamepad");
+        mValueFormats.put(965, "Digitizer Tablet");
+        mValueFormats.put(966, "Card Reader");
+        mValueFormats.put(967, "Digital Pen");
+        mValueFormats.put(968, "Barcode Scanner");
+        mValueFormats.put(1024, "Generic Glucose Meter");
+        mValueFormats.put(1088, "Generic: Running Walking Sensor");
+        mValueFormats.put(1089, "Running Walking Sensor: In-Shoe");
+        mValueFormats.put(1090, "Running Walking Sensor: On-Shoe");
+        mValueFormats.put(1091, "Running Walking Sensor: On-Hip");
+        mValueFormats.put(1152, "Generic: Cycling");
+        mValueFormats.put(1153, "Cycling: Cycling Computer");
+        mValueFormats.put(1154, "Cycling: Speed Sensor");
+        mValueFormats.put(1155, "Cycling: Cadence Sensor");
+        mValueFormats.put(1156, "Cycling: Power Sensor");
+        mValueFormats.put(1157, "Cycling: Speed and Cadence Sensor");
+        mValueFormats.put(3136, "Generic: Pulse Oximeter");
+        mValueFormats.put(3137, "Fingertip");
+        mValueFormats.put(3138, "Wrist Worn");
+        mValueFormats.put(3200, "Generic: Weight Scale");
+        mValueFormats.put(5184, "Generic: Outdoor Sports Activity");
+        mValueFormats.put(5185, "Location Display Device");
+        mValueFormats.put(5186, "Location and Navigation Display Device");
+        mValueFormats.put(5187, "Location Pod");
+        mValueFormats.put(5188, "Location and Navigation Pod");
 
         attributes.put("1a8f6007-a27e-4355-8557-db16a7c92fe0", "VRTren CONTROL");
 
@@ -176,7 +226,7 @@ public class GattAttributes {
 
     static public String resolveValueTypeDescription(final int format) {
         Integer tmp = Integer.valueOf(format);
-        return mValueFormats.get(tmp, "Unknown Format");
+        return mValueFormats.get(tmp, "Unknown Format " + tmp);
     }
 
 }

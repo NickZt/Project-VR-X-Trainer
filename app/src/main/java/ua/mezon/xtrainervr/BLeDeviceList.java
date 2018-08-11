@@ -16,9 +16,8 @@ public class BLeDeviceList {
     }
 
     public boolean addDevice(BluetoothDevice device, int rssi, byte[] scanRecord) {
-        SimpleLog.v(" receive " + device.toString());
         if (!mLeDevices.contains(device)) {
-            SimpleLog.v("TODEL NOT DUPLICATED mLeDevices.contains(device) " + device.toString());
+            SimpleLog.v("TODEL NOT DUPLICATED mLeDevices.add((device) " + device.toString());
             mLeDevices.add(device);
             mRSSIs.add(rssi);
             mRecords.add(scanRecord);
