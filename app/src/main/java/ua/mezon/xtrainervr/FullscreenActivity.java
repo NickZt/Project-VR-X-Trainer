@@ -4,10 +4,6 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Dialog;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothManager;
-import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -37,11 +33,12 @@ import com.asha.vrlib.model.BarrelDistortionConfig;
 import com.asha.vrlib.model.MDPinchConfig;
 import com.don11995.log.SimpleLog;
 
-import java.util.ArrayList;
 import java.util.Locale;
 
+import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.annotations.NonNull;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Consumer;
 import io.reactivex.schedulers.Schedulers;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
@@ -56,8 +53,8 @@ import static ua.mezon.xtrainervr.model.SupportUtilsMtds.READ_EXTERNAL_STORAGE_P
 
 
 public class FullscreenActivity extends AppCompatActivity {
-    private static final int REQUEST_ENABLE_BT = 12;
-    private static final long SCAN_PERIOD = 10000;
+    public static final int REQUEST_ENABLE_BT = 12;
+
     private static final String URLEXT = "file:///storage/external_SD/Download/VRTren/VikingCoaster(3D).mp4";
     //4.avi
     private static final String TAG = "VRTrainer";
@@ -95,10 +92,8 @@ public class FullscreenActivity extends AppCompatActivity {
             return false;
         }
     };
-    private BluetoothAdapter mBluetoothAdapter;
-    private boolean mScanning;
-    private BLeDeviceList mBLeDeviceList = new BLeDeviceList();
-    private Handler mHandler = new Handler();
+
+
     private TextView mConnectionState;
     private ListView mDataField;
     private String mDeviceName;
@@ -145,26 +140,13 @@ public class FullscreenActivity extends AppCompatActivity {
             hide();
         }
     };
-    // Device scan callback.
-    private BluetoothAdapter.LeScanCallback mLeScanCallback =
-            new BluetoothAdapter.LeScanCallback() {
 
-                @Override
-                public void onLeScan(final BluetoothDevice device, int rssi, byte[] scanRecord) {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            SimpleLog.v("TODEL LeScanCallback called " + device.toString());
-                            mBLeDeviceList.addDevice(device);
-                        }
-                    });
-                }
-            };
     private int sVolume = 20;
     private SharedPreferences pref;
     private SharedPreferences.Editor editor;
     //  private GLSurfaceView tmpGLSurfaceView;
-    private String mDeviceNAME = "b";
+    private String mBLEDeviceNAME = "";
+    private boolean mBLEDeviceConnected = false;
     private boolean mbMediaPlayerWrapperisPaused = false;
 
     /* check if user agreed to enable BT */
@@ -176,7 +158,6 @@ public class FullscreenActivity extends AppCompatActivity {
             finish();
             return;
         }
-
         super.onActivityResult(requestCode, resultCode, data);
     }
 
@@ -189,20 +170,14 @@ public class FullscreenActivity extends AppCompatActivity {
         if (mMediaPlayerWrapper != null) {
             mMediaPlayerWrapper.pause();
         }
-        if (mBluetoothAdapter != null) {
-            scanLeDevice(false);
-            if (mBLeDeviceList != null) {
-                mBLeDeviceList.clear();
-            }
-        }
+        mBLEProc.stopBLEScan();
 
     }
+
 
     @Override
     protected void onResume() {
         super.onResume();
-
-        // onresumePermissionCheck();
         if (mVRLibrary != null) {
             mVRLibrary.onResume(this);
         }
@@ -224,10 +199,7 @@ public class FullscreenActivity extends AppCompatActivity {
             // If request is cancelled, the result arrays are empty.
             if (grantResults.length > 0
                     && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-
-                // permission was granted, yay! Do it
-                // filelist();
-                initBLE();
+                mBLEProc.initBLE(this);
 
             } else {
 
@@ -238,7 +210,6 @@ public class FullscreenActivity extends AppCompatActivity {
     }
 
     private void loadValprefs() {
-        // sVolume
 
         pref = getSharedPreferences(PREF_NAME, PRIVATE_MODE);
 
@@ -257,29 +228,6 @@ public class FullscreenActivity extends AppCompatActivity {
         return mVRLibrary;
     }
 
-    private void scanLeDevice(final boolean enable) {
-        if (enable) {
-            // Stops scanning after a pre-defined scan period.
-//            mHandler.postDelayed(new Runnable() {
-//                @Override
-//                public void run() {
-//                    mScanning = false;
-//                    mBluetoothAdapter.stopLeScan(mLeScanCallback);
-//                    SimpleLog.v("TODEL stopLeScan(mLeScanCallback) called ");
-//                    invalidateOptionsMenu();
-//                }
-//            }, SCAN_PERIOD);
-
-            mScanning = true;
-            mBluetoothAdapter.startLeScan(mLeScanCallback);
-            SimpleLog.v("TODEL startLeScan(mLeScanCallback) called ");
-        } else {
-            mScanning = false;
-            mBluetoothAdapter.stopLeScan(mLeScanCallback);
-            SimpleLog.v("TODEL stopLeScan(mLeScanCallback) called ");
-        }
-        invalidateOptionsMenu();
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -322,7 +270,7 @@ public class FullscreenActivity extends AppCompatActivity {
 //        setuptheSurfacevideo();
 
 
-        //  receiveMessagesFromBLE();
+        receiveMessagesFromBLE();
     }
 
     private void checkPermission() {
@@ -365,7 +313,7 @@ public class FullscreenActivity extends AppCompatActivity {
         } else {
             SimpleLog.v("TODEL OK STARTED");
             setuptheSurfacevideo();
-            initBLE();
+            mBLEProc.initBLE(this);
 
         }
     }
@@ -411,36 +359,6 @@ public class FullscreenActivity extends AppCompatActivity {
         });
     }
 
-    private void initBLE() {
-        // Initializes a Bluetooth adapter.  For API level 18 and above, get a reference to
-        // BluetoothAdapter through BluetoothManager.
-        final BluetoothManager bluetoothManager =
-                (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        if (bluetoothManager != null) {
-            mBluetoothAdapter = bluetoothManager.getAdapter();
-        }
-
-        // Checks if Bluetooth is supported on the device.
-        if (mBluetoothAdapter == null) {
-            Toast.makeText(this, R.string.ble_not_supported, Toast.LENGTH_SHORT).show();
-            finish();
-            return;
-        }
-        // Ensures Bluetooth is enabled on the device.  If Bluetooth is not currently enabled,
-        // fire an intent to display a dialog asking the user to grant permission to enable it.
-        if (!mBluetoothAdapter.isEnabled()) {
-            if (!mBluetoothAdapter.isEnabled()) {
-                SimpleLog.d("TODEL !mBluetoothAdapter.isEnabled() ");
-                Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-                startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-            }
-        }
-        mBluetoothAdapter.stopLeScan(mLeScanCallback);
-        // Initializes list view adapter.
-        SimpleLog.d("TODEL scanLeDevice runned");
-        scanLeDevice(true);
-
-    }
 
     protected void init() {
         //   tmpGLSurfaceView = findViewById(R.id.surfaceview);
@@ -476,21 +394,48 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
-    private void resetMediaPlay() {
-        if (bMediaPlayerWrapperisWorked) {//mMediaPlayerWrapper.getPlayer().isPlaying(
-            mMediaPlayerWrapper.pause();
-            mMediaPlayerWrapper.stop();
-            mMediaPlayerWrapper.destroy();
-            mMediaPlayerWrapper.init();
-            bMediaPlayerWrapperisWorked = false;
+    public void receiveMessagesFromBLE() {
+
+        mBLEProc.messsubject
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+//                .subscribeOn(Schedulers.computation())
+                .subscribe(new Observer<String>() {
+                    @Override
+                    public void onSubscribe(Disposable d) {
+
+                    }
+
+                    @Override
+                    public void onNext(@NonNull String v) {
+                        SimpleLog.v("TODEL onNext mBLEProc.messsubject called with: v = [" + v + "]");
+                        mBLEDeviceNAME = v;
+                        mBLEDeviceConnected = false;
+                        showFullMess("Finded  device NAME> " + mBLEDeviceNAME);
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        mBLEDeviceConnected = true;
+                    }
+                });
+        mBLEProc.pingsubject
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribeOn(Schedulers.io())
+
+                .subscribe(new Consumer<String>() {
+                    @Override
+                    public void accept(@NonNull String v) {
+                        SimpleLog.v("accept() mBLEProc.pingsubject called with: v = [" + v + "]");
 
 
-            if (mDeviceNAME.equals("")) {
-                showFullMess("Connected to device NAME>" + mDeviceNAME);
-            } else {
-                showFullMess("VR-X-Trainer");
-            }
-        }
+                    }
+                });
+
     }
 
     @Override
@@ -504,59 +449,26 @@ public class FullscreenActivity extends AppCompatActivity {
         }
     }
 
-    private void onresumePermissionCheck() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+    private void resetMediaPlay() {
+        if (bMediaPlayerWrapperisWorked) {//mMediaPlayerWrapper.getPlayer().isPlaying(
+            mMediaPlayerWrapper.pause();
+            mMediaPlayerWrapper.stop();
+            mMediaPlayerWrapper.destroy();
+            mMediaPlayerWrapper.init();
+            bMediaPlayerWrapperisWorked = false;
 
-            if ((this.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager
-                    .PERMISSION_GRANTED)
-                    || (this.checkSelfPermission(Manifest.permission.BLUETOOTH) != PackageManager
-                    .PERMISSION_GRANTED)
-                    || (this.checkSelfPermission(Manifest.permission.BLUETOOTH_ADMIN) != PackageManager
-                    .PERMISSION_GRANTED)) {
-                this.requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest
-                        .permission.BLUETOOTH
-                        , Manifest.permission.BLUETOOTH_ADMIN}, READ_BLUETOOTH_PERMISSION_CODE);
+
+            if (mBLEDeviceNAME.equals("")) {
+                showFullMess("VR-X-Trainer");
             } else {
-                initBLE();
+                if (mBLEDeviceConnected) {
+                    showFullMess("Finded  device NAME> " + mBLEDeviceNAME);
+                } else {
+                    showFullMess("Connected to device NAME>" + mBLEDeviceNAME);
+                }
+
             }
-        } else {
-            initBLE();
         }
-    }
-
-    public void receiveMessagesFromBLE() {
-
-        mBLEProc.messsubject
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.io())
-//                .subscribeOn(Schedulers.computation())
-                .subscribe(new Consumer<String>() {
-                    @Override
-                    public void accept(@NonNull String v) {
-//                        Log.v(TAG, "accept() mBLEProc.messsubject called with: v = [" + v + "]");
-                        //  mServerItemsAdapter .reset();
-//                        if (v.regionMatches(true, 0, CommandSymbol, 0, 2)) {
-//                            doMessSelector(v.substring(2));
-//                        } else {
-//
-//                            showFullMess("mess>" + v);
-//                        }
-
-                    }
-                });
-        mBLEProc.pingsubject
-                .observeOn(AndroidSchedulers.mainThread())
-                .subscribeOn(Schedulers.io())
-
-                .subscribe(new Consumer<String>() {
-                    @Override
-                    public void accept(@NonNull String v) {
-                        Log.v(TAG, "accept() mBLEProc.pingsubject called with: v = [" + v + "]");
-
-
-                    }
-                });
-
     }
 
     private void startFile(String substring) {
@@ -750,30 +662,4 @@ public class FullscreenActivity extends AppCompatActivity {
 
     }
 
-    private class BLeDeviceList {
-        private ArrayList<BluetoothDevice> mLeDevices = new ArrayList<>();
-
-
-        BLeDeviceList() {
-            super();
-        }
-
-        public void addDevice(BluetoothDevice device) {
-            SimpleLog.v("addDevice " + device.toString());
-            if (!mLeDevices.contains(device)) {
-                SimpleLog.v("!mLeDevices.contains(device) " + device.toString());
-                mLeDevices.add(device);
-            }
-        }
-
-        public BluetoothDevice getDevice(int position) {
-            return mLeDevices.get(position);
-        }
-
-        void clear() {
-            mLeDevices.clear();
-        }
-
-
-    }
 }

@@ -6,9 +6,20 @@ import java.util.HashMap;
 import java.util.UUID;
 
 /**
- * This class includes a  subset of standard GATT attributes.
+ * This class includes a  subset of standard GATT attributes plus wrk names.
  */
-public class SampleGattAttributes {
+public class GattAttributes {
+    public final static String ACTION_GATT_CONNECTED =
+            "ua.mezon.xtrainervr.ACTION_GATT_CONNECTED";
+    public final static String ACTION_GATT_DISCONNECTED =
+            "ua.mezon.xtrainervr.ACTION_GATT_DISCONNECTED";
+    public final static String ACTION_GATT_SERVICES_DISCOVERED =
+            "ua.mezon.xtrainervr.ACTION_GATT_SERVICES_DISCOVERED";
+    public final static String ACTION_DATA_AVAILABLE =
+            "ua.mezon.xtrainervr.ACTION_DATA_AVAILABLE";
+    public final static String EXTRA_DATA =
+            "ua.mezon.xtrainervr.EXTRA_DATA";
+
     final static public UUID MANUFACTURER_STRING = UUID.fromString("00002a29-0000-1000-8000-00805f9b34fb");
     final static public UUID MODEL_NUMBER_STRING = UUID.fromString("00002a24-0000-1000-8000-00805f9b34fb");
     final static public UUID FIRMWARE_REVISION_STRING = UUID.fromString("00002a26-0000-1000-8000-00805f9b34fb");
