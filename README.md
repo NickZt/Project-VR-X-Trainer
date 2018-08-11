@@ -8,6 +8,7 @@ Android part of this project based on
 
 arduino sketch
 
+https://github.com/NickZt/VR-X-TrainerESP32.git
 
 
 ## Preview
